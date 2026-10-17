@@ -1,3 +1,4 @@
+setuptools>=64.0
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
@@ -13,4 +14,3 @@ numpy==1.24.3
 pymongo==4.6.1
 motor==3.3.2
 reportlab==4.0.7
-tensorflow==2.15.0
