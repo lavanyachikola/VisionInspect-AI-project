@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 import os, shutil, uuid, cv2, io, csv
 from datetime import datetime, timedelta
 from app.database import inspections_collection, products_collection
 from app.preprocessing import advanced_preprocess_image
 from app.quality_analysis import analyze_image_quality
 from app.ai_model import detect_defects, draw_defect_result, MODEL_INFO
+from app.pdf_report import generate_pdf_report
 from bson import ObjectId
 
 router = APIRouter(prefix="/inspections", tags=["Inspections"])
@@ -13,9 +14,11 @@ router = APIRouter(prefix="/inspections", tags=["Inspections"])
 UPLOAD_DIR = "uploads"
 PROCESSED_DIR = "processed"
 RESULTS_DIR = "results"
+REPORTS_DIR = "reports"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(REPORTS_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
 
@@ -56,7 +59,7 @@ async def upload_and_inspect(
         file_ext = os.path.splitext(image.filename)[1].lower()
         if file_ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(400, "File type not allowed")
-        
+
         product = None
         try:
             if ObjectId.is_valid(product_id):
@@ -69,39 +72,40 @@ async def upload_and_inspect(
             product = products_collection.find_one({})
         if not product:
             raise HTTPException(404, "No products found")
-        
+
         unique_filename = f"{uuid.uuid4()}_{image.filename}"
         file_path = os.path.join(UPLOAD_DIR, unique_filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(image.file, buffer)
-        
+
         is_valid, message = validate_image(file_path)
         if not is_valid:
             os.remove(file_path)
             raise HTTPException(400, message)
-        
+
         quality_analysis = analyze_image_quality(file_path)
         processed_info = advanced_preprocess_image(file_path, PROCESSED_DIR)
         detection_result = detect_defects(file_path, product.get("product_code", ""))
-        
+
         result_image_filename = f"result_{uuid.uuid4().hex[:8]}.jpg"
         result_image_path = os.path.join(RESULTS_DIR, result_image_filename)
-        
+
         if detection_result.get("defect_detected"):
             primary_defect = {
                 "type": detection_result["defect_type"],
                 "confidence": detection_result["confidence"],
                 "location": detection_result["location"]
             }
-            draw_defect_result(file_path, primary_defect, result_image_path, detection_result["severity_level"])
+            draw_defect_result(file_path, primary_defect, result_image_path,
+                             detection_result["severity_level"])
         else:
             shutil.copy(file_path, result_image_path)
-        
+
         decision, recommendation = get_final_decision(
             detection_result.get("severity_level", "None"),
             detection_result.get("defect_detected", False)
         )
-        
+
         inspection_data = {
             "product_id": str(product["_id"]),
             "product_name": product.get("product_name", "Unknown"),
@@ -130,12 +134,12 @@ async def upload_and_inspect(
             "created_at": datetime.utcnow(),
             "completed_at": datetime.utcnow()
         }
-        
+
         result = inspections_collection.insert_one(inspection_data)
         inspection_data["id"] = str(result.inserted_id)
-        
+
         return {
-            "message": "✅ Inspection completed",
+            "message": "Inspection completed",
             "inspection": {
                 "id": inspection_data["id"],
                 "product_name": inspection_data["product_name"],
@@ -167,6 +171,7 @@ async def upload_and_inspect(
             "result_image_url": f"http://127.0.0.1:8000/results/{result_image_filename}",
             "processed_image_url": f"http://127.0.0.1:8000/processed/{os.path.basename(processed_info['processed_path'])}"
         }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -191,10 +196,10 @@ def get_stats():
     passed = inspections_collection.count_documents({"decision": "PASS"})
     reworked = inspections_collection.count_documents({"decision": "REWORK"})
     rejected = inspections_collection.count_documents({"decision": "REJECT"})
-    
+
     defect_rate = (defective / total * 100) if total > 0 else 0
     pass_rate = (passed / total * 100) if total > 0 else 0
-    
+
     return {
         "total": total,
         "defective": defective,
@@ -219,33 +224,32 @@ def get_analytics_summary():
     passed = inspections_collection.count_documents({"decision": "PASS"})
     reworked = inspections_collection.count_documents({"decision": "REWORK"})
     rejected = inspections_collection.count_documents({"decision": "REJECT"})
-    
+
     defect_types = ["Crack", "Dent", "Contamination", "Scratch", "Surface Defect"]
     defect_distribution = {dt: inspections_collection.count_documents({"defect_type": dt}) for dt in defect_types}
-    
+
     severity_distribution = {
         "Critical": inspections_collection.count_documents({"severity_level": "Critical"}),
         "High": inspections_collection.count_documents({"severity_level": "High"}),
         "Medium": inspections_collection.count_documents({"severity_level": "Medium"}),
         "Low": inspections_collection.count_documents({"severity_level": "Low"})
     }
-    
+
     defect_rate = (defective / total * 100) if total > 0 else 0
     pass_rate = (passed / total * 100) if total > 0 else 0
-    
+
     avg_sev = list(inspections_collection.aggregate([
         {"$match": {"defect_detected": True}},
         {"$group": {"_id": None, "v": {"$avg": "$severity_score"}}}
     ]))
     avg_severity = round(avg_sev[0]["v"], 2) if avg_sev else 0
-    
+
     avg_conf = list(inspections_collection.aggregate([
         {"$match": {"defect_detected": True}},
         {"$group": {"_id": None, "v": {"$avg": "$confidence"}}}
     ]))
     avg_confidence = round(avg_conf[0]["v"] * 100, 2) if avg_conf else 0
-    
-    # 7-day trend
+
     daily_trend = []
     today = datetime.utcnow()
     for i in range(6, -1, -1):
@@ -257,8 +261,7 @@ def get_analytics_summary():
             "total": inspections_collection.count_documents({"created_at": {"$gte": s, "$lte": e}}),
             "defective": inspections_collection.count_documents({"created_at": {"$gte": s, "$lte": e}, "defect_detected": True})
         })
-    
-    # Product stats
+
     product_stats = []
     for item in inspections_collection.aggregate([
         {"$group": {
@@ -277,7 +280,7 @@ def get_analytics_summary():
                 "defective": item["defective"],
                 "pass_rate": round(pr, 2)
             })
-    
+
     return {
         "total": total,
         "defective": defective,
@@ -297,51 +300,43 @@ def get_analytics_summary():
 
 @router.get("/model-performance")
 def get_model_performance():
-    """Compute model metrics from stored inspections using image_path"""
+    """Compute model metrics from stored inspections"""
     tp = tn = fp = fn = 0
     total_classified = 0
-    
+
     for insp in inspections_collection.find({}):
         img_path = (insp.get("image_path") or insp.get("image_filename") or "").lower()
         is_defect = insp.get("defect_detected", False)
-        
-        # Determine ground truth from folder path or filename
-        # "good" folder → should be PASS
-        # anything with broken/contamination/crack/etc → should be REJECT
+
         is_actual_defect = any(k in img_path for k in [
-            "broken", "contamination", "crack", "scratch", 
+            "broken", "contamination", "crack", "scratch",
             "dent", "hole", "damaged", "faulty", "defect",
             "bent", "cut", "missing", "glue", "poke"
         ])
         is_actual_good = "good" in img_path
-        
+
         if not is_actual_defect and not is_actual_good:
-            # Can't determine ground truth, skip
             continue
-        
+
         total_classified += 1
-        
+
         if is_actual_defect:
-            if is_defect:
-                tp += 1
-            else:
-                fn += 1
+            if is_defect: tp += 1
+            else: fn += 1
         elif is_actual_good:
-            if is_defect:
-                fp += 1
-            else:
-                tn += 1
-    
+            if is_defect: fp += 1
+            else: tn += 1
+
     total = tp + tn + fp + fn
     accuracy = ((tp + tn) / total * 100) if total > 0 else 0
     precision = (tp / (tp + fp) * 100) if (tp + fp) > 0 else 0
     recall = (tp / (tp + fn) * 100) if (tp + fn) > 0 else 0
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0
-    
+
     total_inspections = inspections_collection.count_documents({})
     defective_found = inspections_collection.count_documents({"defect_detected": True})
     passed = inspections_collection.count_documents({"decision": "PASS"})
-    
+
     return {
         "total_tested": total_classified,
         "true_positives": tp,
@@ -364,12 +359,13 @@ def export_csv():
     def generate():
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["ID", "Product", "Image", "Defect Type", "Confidence", "Severity Score", "Severity Level", "Decision", "Date"])
+        writer.writerow(["ID", "Product", "Image", "Defect Type", "Confidence",
+                        "Severity Score", "Severity Level", "Decision", "Date"])
         output.seek(0)
         yield output.read()
         output.seek(0)
         output.truncate(0)
-        
+
         for insp in inspections_collection.find({}).sort("created_at", -1):
             writer.writerow([
                 str(insp["_id"])[-4:],
@@ -386,12 +382,41 @@ def export_csv():
             yield output.read()
             output.seek(0)
             output.truncate(0)
-    
+
     return StreamingResponse(
         generate(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=inspections.csv"}
     )
+
+
+@router.get("/{inspection_id}/pdf")
+def download_pdf(inspection_id: str):
+    """Download inspection report as PDF"""
+    try:
+        inspection = inspections_collection.find_one({"_id": ObjectId(inspection_id)})
+    except:
+        inspection = inspections_collection.find_one({"_id": inspection_id})
+
+    if not inspection:
+        raise HTTPException(404, "Inspection not found")
+
+    inspection["id"] = str(inspection["_id"])
+    inspection.pop("_id", None)
+
+    pdf_path = os.path.join(REPORTS_DIR, f"report_{inspection_id}.pdf")
+
+    try:
+        generate_pdf_report(inspection, pdf_path)
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            filename=f"inspection_report_{str(inspection_id)[-8:]}.pdf"
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"PDF generation failed: {str(e)}")
 
 
 @router.get("/{inspection_id}")

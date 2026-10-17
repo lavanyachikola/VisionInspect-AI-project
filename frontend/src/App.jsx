@@ -579,6 +579,34 @@ function App() {
                   <h4 className="report-h4">Recommendation</h4>
                   <p style={{ color: '#94a3b8', fontSize: '14px' }}>{selectedInspection.recommendation}</p>
                 </div>
+
+                <div className="report-section">
+                  <h4 className="report-h4">Actions</h4>
+                  <button
+                    className="btn-primary"
+                    style={{ marginTop: '8px' }}
+                    onClick={async () => {
+                      const token = localStorage.getItem('token')
+                      const r = await fetch(`http://127.0.0.1:8000/inspections/${selectedInspection.id}/pdf`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                      })
+                      if (r.ok) {
+                        const blob = await r.blob()
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `inspection_${String(selectedInspection.id).slice(-8)}.pdf`
+                        a.click()
+                        URL.revokeObjectURL(url)
+                      } else {
+                        alert('Failed to download PDF')
+                      }
+                    }}
+                  >
+                    📄 Download PDF Report
+                  </button>
+                </div>
+
               </div>
             </div>
           </div>
