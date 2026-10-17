@@ -419,6 +419,122 @@ def download_pdf(inspection_id: str):
         raise HTTPException(500, f"PDF generation failed: {str(e)}")
 
 
+
+@router.post("/batch-upload")
+async def batch_upload_and_inspect(
+    product_id: str = Form(...),
+    images: list[UploadFile] = File(...)
+):
+    """Upload and inspect multiple images at once"""
+    results = []
+    errors = []
+    
+    for image in images:
+        try:
+            file_ext = os.path.splitext(image.filename)[1].lower()
+            if file_ext not in ALLOWED_EXTENSIONS:
+                errors.append({"file": image.filename, "error": "File type not allowed"})
+                continue
+            
+            product = None
+            try:
+                if ObjectId.is_valid(product_id):
+                    product = products_collection.find_one({"_id": ObjectId(product_id)})
+            except:
+                pass
+            if not product:
+                product = products_collection.find_one({"product_code": product_id})
+            if not product:
+                product = products_collection.find_one({})
+            if not product:
+                errors.append({"file": image.filename, "error": "No product found"})
+                continue
+            
+            unique_filename = f"{uuid.uuid4()}_{image.filename}"
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
+            
+            is_valid, message = validate_image(file_path)
+            if not is_valid:
+                os.remove(file_path)
+                errors.append({"file": image.filename, "error": message})
+                continue
+            
+            quality_analysis = analyze_image_quality(file_path)
+            processed_info = advanced_preprocess_image(file_path, PROCESSED_DIR)
+            detection_result = detect_defects(file_path, product.get("product_code", ""))
+            
+            result_image_filename = f"result_{uuid.uuid4().hex[:8]}.jpg"
+            result_image_path = os.path.join(RESULTS_DIR, result_image_filename)
+            
+            if detection_result.get("defect_detected"):
+                primary_defect = {
+                    "type": detection_result["defect_type"],
+                    "confidence": detection_result["confidence"],
+                    "location": detection_result["location"]
+                }
+                draw_defect_result(file_path, primary_defect, result_image_path,
+                                 detection_result["severity_level"])
+            else:
+                shutil.copy(file_path, result_image_path)
+            
+            decision, recommendation = get_final_decision(
+                detection_result.get("severity_level", "None"),
+                detection_result.get("defect_detected", False)
+            )
+            
+            inspection_data = {
+                "product_id": str(product["_id"]),
+                "product_name": product.get("product_name", "Unknown"),
+                "product_code": product.get("product_code", "Unknown"),
+                "image_path": file_path,
+                "processed_image_path": processed_info["processed_path"],
+                "result_image_path": result_image_path,
+                "image_filename": image.filename,
+                "status": "completed",
+                "image_width": processed_info["original_width"],
+                "image_height": processed_info["original_height"],
+                "file_size": processed_info["file_size"],
+                "quality_analysis": quality_analysis,
+                "preprocessing_steps": processed_info["steps"],
+                "defect_detected": detection_result.get("defect_detected", False),
+                "defect_type": detection_result.get("defect_type"),
+                "confidence": detection_result.get("confidence", 0),
+                "defect_location": detection_result.get("location"),
+                "all_defects": detection_result.get("all_defects", []),
+                "severity_score": detection_result.get("severity_score", 0),
+                "severity_level": detection_result.get("severity_level", "None"),
+                "decision": decision,
+                "recommendation": recommendation,
+                "timing": detection_result.get("timing", {}),
+                "model_info": detection_result.get("model_info", MODEL_INFO),
+                "created_at": datetime.utcnow(),
+                "completed_at": datetime.utcnow()
+            }
+            
+            result = inspections_collection.insert_one(inspection_data)
+            inspection_data["id"] = str(result.inserted_id)
+            
+            results.append({
+                "id": inspection_data["id"],
+                "filename": image.filename,
+                "decision": decision,
+                "defect_type": detection_result.get("defect_type"),
+                "confidence": detection_result.get("confidence", 0)
+            })
+        except Exception as e:
+            errors.append({"file": image.filename, "error": str(e)})
+    
+    return {
+        "total": len(images),
+        "successful": len(results),
+        "failed": len(errors),
+        "results": results,
+        "errors": errors
+    }
+
+
 @router.get("/{inspection_id}")
 def get_inspection(inspection_id: str):
     try:
