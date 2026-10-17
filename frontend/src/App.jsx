@@ -356,7 +356,17 @@ function App() {
 
           
 
-{result?.type === 'success' && <ResultDisplay data={result.data} previewUrl={preview} />}
+{showCamera && (
+          <CameraCapture
+            onCapture={(file) => {
+              setSelectedFile(file)
+              setPreview(URL.createObjectURL(file))
+              setShowCamera(false)
+            }}
+            onClose={() => setShowCamera(false)}
+          />
+        )}
+        {result?.type === 'success' && <ResultDisplay data={result.data} previewUrl={preview} />}
         {result?.type === 'error' && <div className="error-box"><p>{result.message}</p></div>}
       </div>
     </div>
