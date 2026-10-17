@@ -335,16 +335,7 @@ function App() {
           
 
 
-          <div style={{ marginTop: '12px', textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setShowCamera(true)}
-              className="btn-secondary"
-              style={{ padding: '12px 24px', fontSize: '15px' }}
-            >
-              📷 Or Capture from Camera
-            </button>
-          </div>
+          
 
           <button type="submit" disabled={loading} className="btn-primary btn-full">
             {loading ? 'AI Analyzing...' : 'Run AI Inspection'}
@@ -933,16 +924,7 @@ function App() {
           
 
 
-          <div style={{ marginTop: '12px', textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setShowCamera(true)}
-              className="btn-secondary"
-              style={{ padding: '12px 24px', fontSize: '15px' }}
-            >
-              📷 Or Capture from Camera
-            </button>
-          </div>
+          
 
           <button type="submit" disabled={loading} className="btn-primary btn-full">
             {loading ? 'Signing in...' : 'Sign In'}
