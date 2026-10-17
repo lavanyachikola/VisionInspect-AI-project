@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import CameraCapture from './CameraCapture'
 
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [categoryImages, setCategoryImages] = useState([])
   const [selectedInspection, setSelectedInspection] = useState(null)
+  const [showCamera, setShowCamera] = useState(false)
   
   
   
@@ -331,6 +333,18 @@ function App() {
           </div>
 
           
+
+
+          <div style={{ marginTop: '12px', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setShowCamera(true)}
+              className="btn-secondary"
+              style={{ padding: '12px 24px', fontSize: '15px' }}
+            >
+              📷 Or Capture from Camera
+            </button>
+          </div>
 
           <button type="submit" disabled={loading} className="btn-primary btn-full">
             {loading ? 'AI Analyzing...' : 'Run AI Inspection'}
@@ -907,6 +921,18 @@ function App() {
           </div>
 
           
+
+
+          <div style={{ marginTop: '12px', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setShowCamera(true)}
+              className="btn-secondary"
+              style={{ padding: '12px 24px', fontSize: '15px' }}
+            >
+              📷 Or Capture from Camera
+            </button>
+          </div>
 
           <button type="submit" disabled={loading} className="btn-primary btn-full">
             {loading ? 'Signing in...' : 'Sign In'}
