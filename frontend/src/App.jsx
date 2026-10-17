@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import CameraCapture from './CameraCapture'
+
 
 function App() {
   const [email, setEmail] = useState('engineer@gmail.com')
@@ -22,9 +22,9 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [categoryImages, setCategoryImages] = useState([])
   const [selectedInspection, setSelectedInspection] = useState(null)
-  const [showCamera, setShowCamera] = useState(false)
-  const [batchFiles, setBatchFiles] = useState([])
-  const [batchResults, setBatchResults] = useState(null)
+  
+  
+  
   const [filterDecision, setFilterDecision] = useState('all')
   const [filterProduct, setFilterProduct] = useState('all')
 
@@ -135,45 +135,7 @@ function App() {
   }
 
 
-  const handleBatchUpload = async () => {
-    if (!selectedProduct || batchFiles.length === 0) {
-      alert('Please select product and multiple images')
-      return
-    }
-    
-    setLoading(true)
-    setBatchResults(null)
-    
-    try {
-      const formData = new FormData()
-      formData.append('product_id', selectedProduct)
-      batchFiles.forEach((file) => {
-        formData.append('images', file)
-      })
-      
-      const token = localStorage.getItem('token')
-      const res = await fetch('http://127.0.0.1:8000/inspections/batch-upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      })
-      
-      const data = await res.json()
-      if (res.ok) {
-        setBatchResults(data)
-        fetchInspections()
-        fetchStats()
-        setBatchFiles([])
-      } else {
-        alert('Batch upload failed: ' + (data.detail || 'Unknown error'))
-      }
-    } catch (error) {
-      alert('Error: ' + error.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  
   const handleFileChange = (e) => {
     const f = e.target.files[0]
     if (f) { setSelectedFile(f); setPreview(URL.createObjectURL(f)); setResult(null) }
@@ -222,7 +184,7 @@ function App() {
         <div className="logo">V</div>
         <div>
           <h1 className="nav-title">VisionInspect <span style={{color:'#3b82f6'}}>AI</span></h1>
-          <span className="nav-sub">MILESTONE 3</span>
+          
         </div>
       </div>
       <div className="nav-right">
@@ -368,87 +330,17 @@ function App() {
             </div>
           </div>
 
-          <div style={{ marginTop: '12px', textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setShowCamera(true)}
-              className="btn-secondary"
-              style={{ padding: '12px 24px', fontSize: '15px' }}
-            >
-              📷 Or Capture from Camera
-            </button>
-          </div>
+          
 
           <button type="submit" disabled={loading} className="btn-primary btn-full">
             {loading ? 'AI Analyzing...' : 'Run AI Inspection'}
           </button>
         </form>
-        {showCamera && (
-          <CameraCapture
-            onCapture={(file) => {
-              setSelectedFile(file)
-              setPreview(URL.createObjectURL(file))
-              setShowCamera(false)
-            }}
-            onClose={() => setShowCamera(false)}
-          />
-        )}
         
-          {batchFiles.length > 1 && (
-            <div style={{ marginTop: '16px', padding: '16px', background: 'rgba(59,130,246,0.1)', borderRadius: '12px' }}>
-              <p style={{ color: '#60a5fa', fontWeight: '600', marginBottom: '8px' }}>
-                📦 Batch Upload: {batchFiles.length} files selected
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-                {batchFiles.map((f, i) => (
-                  <span key={i} style={{ padding: '4px 10px', background: 'rgba(10,14,23,0.6)', borderRadius: '6px', fontSize: '12px', color: '#94a3b8' }}>
-                    {f.name}
-                  </span>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={handleBatchUpload}
-                disabled={loading || !selectedProduct}
-                className="btn-primary"
-                style={{ padding: '10px 20px' }}
-              >
-                {loading ? 'Processing...' : `🚀 Upload & Inspect All ${batchFiles.length} Images`}
-              </button>
-            </div>
-          )}
+        
+          
 
-          {batchResults && (
-            <div style={{ marginTop: '16px', padding: '16px', background: '#1a2332', borderRadius: '12px', border: '1px solid rgba(59,130,246,0.2)' }}>
-              <h4 style={{ color: 'white', marginBottom: '12px' }}>
-                ✅ Batch Results ({batchResults.successful}/{batchResults.total} successful)
-              </h4>
-              <table style={{ width: '100%', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ color: '#64748b', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>File</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>Decision</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>Defect</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>Confidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {batchResults.results.map((r, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(59,130,246,0.05)' }}>
-                      <td style={{ padding: '8px', color: '#94a3b8' }}>{r.filename}</td>
-                      <td style={{ padding: '8px' }}>{getBadge(r.decision)}</td>
-                      <td style={{ padding: '8px', color: r.defect_type ? '#f87171' : '#34d399' }}>
-                        {r.defect_type || 'None'}
-                      </td>
-                      <td style={{ padding: '8px', color: '#94a3b8' }}>
-                        {r.confidence ? `${Math.round(r.confidence * 100)}%` : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          
 
 {result?.type === 'success' && <ResultDisplay data={result.data} previewUrl={preview} />}
         {result?.type === 'error' && <div className="error-box"><p>{result.message}</p></div>}
@@ -1003,7 +895,7 @@ function App() {
         <div className="login-logo">V</div>
         <h1 className="login-title">VisionInspect <span style={{color:'#3b82f6'}}>AI</span></h1>
         <p className="login-sub">Manufacturing Quality Control</p>
-        <span className="login-badge">Milestone 3</span>
+        
         <form onSubmit={handleLogin} className="login-form">
           <div className="form-group">
             <label className="form-label">Email</label>
@@ -1014,16 +906,7 @@ function App() {
             <input type="password" className="form-input" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
 
-          <div style={{ marginTop: '12px', textAlign: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setShowCamera(true)}
-              className="btn-secondary"
-              style={{ padding: '12px 24px', fontSize: '15px' }}
-            >
-              📷 Or Capture from Camera
-            </button>
-          </div>
+          
 
           <button type="submit" disabled={loading} className="btn-primary btn-full">
             {loading ? 'Signing in...' : 'Sign In'}
