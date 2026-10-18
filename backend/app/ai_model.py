@@ -162,7 +162,11 @@ def predict_with_cnn(image_path: str):
         img_array = img.astype(np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
         
-        predictions = model.predict(img_array, verbose=0)[0]
+        input_details = model.get_input_details()
+        output_details = model.get_output_details()
+        model.set_tensor(input_details[0]['index'], img_array)
+        model.invoke()
+        predictions = model.get_tensor(output_details[0]['index'])[0]
         
         top_idx = int(np.argmax(predictions))
         top_class = classes[top_idx]
