@@ -122,23 +122,28 @@ def extract_features(image_path: str) -> dict:
 
 
 def classify_defect(features: dict) -> dict:
-    """Fallback classifier"""
+    """Strict fallback classifier for cloud deployment"""
     scores = {}
     edge_ratio = features.get("edge_ratio", 0)
     lap_ratio = features.get("lap_ratio", 0)
     cell_var_cv = features.get("cell_var_cv", 0)
     max_lap = features.get("max_lap_var", 0)
     
-    if edge_ratio > 15:
-        scores["Crack"] = min(1.0, 0.6 + (edge_ratio - 15) / 30)
-    if lap_ratio > 30:
-        scores["Scratch"] = min(1.0, 0.6 + (lap_ratio - 30) / 50)
-    if cell_var_cv > 4:
-        scores["Dent"] = min(1.0, 0.6 + (cell_var_cv - 4) / 3)
-    if max_lap > 500:
-        scores["Surface Defect"] = min(1.0, 0.6 + (max_lap - 500) / 1000)
+    # Much lower thresholds to catch defects
+    if edge_ratio > 6:
+        scores["Crack"] = min(1.0, 0.6 + (edge_ratio - 6) / 10)
+    if lap_ratio > 12:
+        scores["Scratch"] = min(1.0, 0.6 + (lap_ratio - 12) / 20)
+    if cell_var_cv > 2.5:
+        scores["Dent"] = min(1.0, 0.6 + (cell_var_cv - 2.5) / 2)
+    if max_lap > 250:
+        scores["Surface Defect"] = min(1.0, 0.6 + (max_lap - 250) / 500)
     
-    return {k: round(v, 2) for k, v in scores.items() if v >= 0.70}
+    # If nothing is detected, but features are slightly abnormal, flag it
+    if not scores and (edge_ratio > 4 or lap_ratio > 8):
+        scores["Surface Defect"] = 0.65
+        
+    return {k: round(v, 2) for k, v in scores.items() if v >= 0.60}
 
 
 def predict_with_cnn(image_path: str):
